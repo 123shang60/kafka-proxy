@@ -481,6 +481,11 @@ func SetLogger() {
 		logrus.Errorf("Couldn't parse log level: %s", c.Log.Level)
 		level = logrus.InfoLevel
 	}
+
+	if level == logrus.DebugLevel {
+		logrus.SetReportCaller(true)
+	}
+
 	logrus.SetLevel(level)
 }
 

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"math"
 	"strings"
 	"sync"
@@ -246,14 +247,17 @@ func newKerberosClient(config *config.GSSAPIConfig) (KerberosClient, error) {
 
 func createClient(gssapiConfig *config.GSSAPIConfig, cfg *krb5config.Config) (KerberosClient, error) {
 	var client *krb5client.Client
+
+	l := log.New(logrus.StandardLogger().Out, "GOKRB5 Client: ", log.Ldate|log.Ltime|log.Lshortfile)
+
 	if gssapiConfig.AuthType == config.KRB5_KEYTAB_AUTH {
 		kt, err := keytab.Load(gssapiConfig.KeyTabPath)
 		if err != nil {
 			return nil, err
 		}
-		client = krb5client.NewWithKeytab(gssapiConfig.Username, gssapiConfig.Realm, kt, cfg, krb5client.DisablePAFXFAST(gssapiConfig.DisablePAFXFAST))
+		client = krb5client.NewWithKeytab(gssapiConfig.Username, gssapiConfig.Realm, kt, cfg, krb5client.DisablePAFXFAST(gssapiConfig.DisablePAFXFAST), krb5client.Logger(l))
 	} else {
-		client = krb5client.NewWithPassword(gssapiConfig.Username, gssapiConfig.Realm, gssapiConfig.Password, cfg, krb5client.DisablePAFXFAST(gssapiConfig.DisablePAFXFAST))
+		client = krb5client.NewWithPassword(gssapiConfig.Username, gssapiConfig.Realm, gssapiConfig.Password, cfg, krb5client.DisablePAFXFAST(gssapiConfig.DisablePAFXFAST), krb5client.Logger(l))
 	}
 	return &KerberosGoKrb5Client{*client}, nil
 }
