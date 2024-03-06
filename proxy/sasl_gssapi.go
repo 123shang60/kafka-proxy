@@ -247,8 +247,11 @@ func newKerberosClient(config *config.GSSAPIConfig) (KerberosClient, error) {
 
 func createClient(gssapiConfig *config.GSSAPIConfig, cfg *krb5config.Config) (KerberosClient, error) {
 	var client *krb5client.Client
+	var l *log.Logger
 
-	l := log.New(logrus.StandardLogger().Out, "GOKRB5 Client: ", log.Ldate|log.Ltime|log.Lshortfile)
+	if logrus.GetLevel() == logrus.DebugLevel {
+		l = log.New(logrus.StandardLogger().Out, "GOKRB5 Client: ", log.Ldate|log.Ltime|log.Lshortfile)
+	}
 
 	if gssapiConfig.AuthType == config.KRB5_KEYTAB_AUTH {
 		kt, err := keytab.Load(gssapiConfig.KeyTabPath)
