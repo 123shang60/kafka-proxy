@@ -16,7 +16,7 @@ require (
 	github.com/hashicorp/go-multierror v0.0.0-20171204182908-b7773ae21874
 	github.com/hashicorp/go-plugin v1.4.9
 	github.com/jcmturner/gofork v1.7.6
-	github.com/jcmturner/gokrb5/v8 v8.4.3
+	github.com/jcmturner/gokrb5/v8 v8.4.4
 	github.com/oklog/run v1.1.0
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.11.1
