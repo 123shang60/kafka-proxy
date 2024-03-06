@@ -4,7 +4,14 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"io"
+	"math"
+	"strings"
+	"sync"
+	"time"
+
 	"github.com/grepplabs/kafka-proxy/config"
+	"github.com/jcmturner/gofork/encoding/asn1"
 	"github.com/jcmturner/gokrb5/v8/asn1tools"
 	krb5client "github.com/jcmturner/gokrb5/v8/client"
 	krb5config "github.com/jcmturner/gokrb5/v8/config"
@@ -15,17 +22,16 @@ import (
 	"github.com/jcmturner/gokrb5/v8/messages"
 	"github.com/jcmturner/gokrb5/v8/types"
 	"github.com/sirupsen/logrus"
-	"io"
-	"math"
-	"strings"
-	"time"
-
-	"github.com/jcmturner/gofork/encoding/asn1"
 )
 
 const (
 	TOK_ID_KRB_AP_REQ   = 256
 	GSS_API_GENERIC_TAG = 0x60
+)
+
+var (
+	kerberosClient KerberosClient
+	loadIconOnce   sync.Once
 )
 
 type SASLGSSAPIAuth struct {
@@ -34,19 +40,23 @@ type SASLGSSAPIAuth struct {
 	gssapiConfig *config.GSSAPIConfig
 }
 
-func (g *SASLGSSAPIAuth) sendAndReceiveSASLAuth(conn DeadlineReaderWriter, brokerAddress string) error {
-	logrus.Debugf("GSSAPI Authorize %s / %s", g.gssapiConfig.Username, brokerAddress)
-
-	kerberosClient, err := newKerberosClient(g.gssapiConfig)
+func (g *SASLGSSAPIAuth) loginAtOnce() {
+	logrus.Info("Login to Kerberos at once !")
+	var err error
+	kerberosClient, err = newKerberosClient(g.gssapiConfig)
 	if err != nil {
-		return err
+		logrus.Fatal("Failed to create Kerberos client", err)
 	}
 	// AS_REQ
 	err = kerberosClient.Login()
 	if err != nil {
-		logrus.Errorf("Failed to send GSSAPI AS_REQ for user %s", g.gssapiConfig.Username)
-		return err
+		logrus.Fatalf("Failed to send GSSAPI AS_REQ for user %s", g.gssapiConfig.Username)
 	}
+}
+
+func (g *SASLGSSAPIAuth) sendAndReceiveSASLAuth(conn DeadlineReaderWriter, brokerAddress string) error {
+	loadIconOnce.Do(g.loginAtOnce)
+	logrus.Debugf("GSSAPI Authorize %s / %s", g.gssapiConfig.Username, brokerAddress)
 
 	host := strings.SplitN(brokerAddress, ":", 2)[0]
 	if h, ok := g.gssapiConfig.SPNHostsMapping[host]; ok && h != "" {
@@ -54,6 +64,7 @@ func (g *SASLGSSAPIAuth) sendAndReceiveSASLAuth(conn DeadlineReaderWriter, broke
 		host = h
 	}
 	spn := fmt.Sprintf("%s/%s", g.gssapiConfig.ServiceName, host)
+	logrus.Debugf("USE SPN: %s", spn)
 	// TGS_REQ
 	ticket, encKey, err := kerberosClient.GetServiceTicket(spn)
 
@@ -61,7 +72,6 @@ func (g *SASLGSSAPIAuth) sendAndReceiveSASLAuth(conn DeadlineReaderWriter, broke
 		logrus.Errorf("Failed to send GSSAPI TGS_REQ for SPN %s", spn)
 		return err
 	}
-	defer kerberosClient.Destroy()
 
 	//AP_REQ
 	aprBytes, err := g.createApReq(
