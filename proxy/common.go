@@ -4,11 +4,12 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"github.com/sirupsen/logrus"
 	"io"
 	"net"
 	"sync"
 	"time"
+
+	"github.com/sirupsen/logrus"
 )
 
 type DeadlineReadWriteCloser interface {
@@ -32,73 +33,6 @@ type DeadlineReaderWriter interface {
 	DeadlineReader
 	DeadlineWriter
 	SetDeadline(t time.Time) error
-}
-
-// myCopy is similar to io.Copy, but reports whether the returned error was due
-// to a bad read or write. The returned error will never be nil
-func myCopy(dst io.Writer, src io.Reader) (readErr bool, err error) {
-	buf := make([]byte, 4096)
-	for {
-		n, err := src.Read(buf)
-		if n > 0 {
-			if _, werr := dst.Write(buf[:n]); werr != nil {
-				if err == nil {
-					return false, werr
-				}
-				// Read and write error; just report read error (it happened first).
-				return true, err
-			}
-		}
-		if err != nil {
-			return true, err
-		}
-	}
-}
-
-// myCopyN is similar to io.CopyN, but reports whether the returned error was due
-// to a bad read or write. The returned error will never be nil
-func myCopyN(dst io.Writer, src io.Reader, size int64, buf []byte) (readErr bool, err error) {
-	// limit reader  - EOF when finished
-	src = io.LimitReader(src, size)
-
-	var written int64
-	var n int
-	for {
-		n, err = src.Read(buf)
-		if n > 0 {
-			nw, werr := dst.Write(buf[0:n])
-			if nw > 0 {
-				written += int64(nw)
-			}
-			if err != nil {
-				// Read and write error; just report read error (it happened first).
-				readErr = true
-				break
-			}
-			if werr != nil {
-				err = werr
-				break
-			}
-			if n != nw {
-				err = io.ErrShortWrite
-				break
-			}
-		}
-		if err != nil {
-			readErr = true
-			break
-		}
-	}
-
-	if written == size {
-		return false, nil
-	}
-	if written < size && err == nil {
-		// src stopped early; must have been EOF.
-		readErr = true
-		err = io.EOF
-	}
-	return
 }
 
 func copyError(readDesc, writeDesc string, readErr bool, err error) {
